@@ -27,9 +27,10 @@ contract DavidsonDAOTest is Test {
         // Get Box
         box = dao.box();
         
-        // Transfer tokens to users
-        token.transfer(user1, 100 ether);
-        token.transfer(user2, 50 ether);
+        // Transfer tokens to users - give enough to meet the proposal threshold
+        // The threshold is 1% of total supply (10,000 tokens)
+        token.transfer(user1, 100000 ether); // 100,000 tokens
+        token.transfer(user2, 50000 ether);  // 50,000 tokens
         
         // Users delegate to themselves
         vm.stopPrank();
@@ -41,6 +42,9 @@ contract DavidsonDAOTest is Test {
         vm.startPrank(user2);
         token.delegate(user2);
         vm.stopPrank();
+        
+        // Move forward a block to activate voting power
+        vm.roll(block.number + 1);
     }
     
     function testProposalCreation() public {
@@ -118,8 +122,8 @@ contract DavidsonDAOTest is Test {
             
         ) = dao.getProposal(proposalId);
         
-        assertEq(votesFor, 100 ether, "Votes for should be 100 ether");
-        assertEq(votesAgainst, 50 ether, "Votes against should be 50 ether");
+        assertEq(votesFor, 100000 ether, "Votes for should be 100000 ether");
+        assertEq(votesAgainst, 50000 ether, "Votes against should be 50000 ether");
         
         // Check that users have voted
         assertTrue(dao.hasVoted(proposalId, user1), "User1 should have voted");

@@ -158,8 +158,8 @@ contract DavidsonDAO {
         // Mark the sender as having voted
         proposal.hasVoted[msg.sender] = true;
         
-        // Get the voting weight
-        uint256 weight = token.getPastVotes(msg.sender, proposal.votingEnds - VOTING_PERIOD);
+        // Get the voting weight - use current block number instead of proposal start
+        uint256 weight = token.getPastVotes(msg.sender, block.number - 1);
         
         // Update the vote count
         if (_support) {
