@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.19;
+pragma solidity ^0.8.20;
 
 import "forge-std/Script.sol";
+import "../contracts/GovernanceToken.sol";
 import "../Dao.sol";
 
 contract DeployDAO is Script {
@@ -10,13 +11,13 @@ contract DeployDAO is Script {
         
         vm.startBroadcast(deployerPrivateKey);
         
-        // Deploy the DAO
-        DavidsonDAO dao = new DavidsonDAO();
+        // Deploy the governance token
+        GovernanceToken token = new GovernanceToken();
+        console.log("GovernanceToken deployed at:", address(token));
         
-        console.log("DAO deployed at:", address(dao));
-        console.log("GovernanceToken deployed at:", address(dao.governanceToken()));
-        console.log("GovernorContract deployed at:", address(dao.governor()));
-        console.log("Timelock deployed at:", address(dao.timelock()));
+        // Deploy the DAO
+        DavidsonDAO dao = new DavidsonDAO(token);
+        console.log("DavidsonDAO deployed at:", address(dao));
         console.log("Box deployed at:", address(dao.box()));
         
         vm.stopBroadcast();

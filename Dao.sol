@@ -1,71 +1,278 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.19;
+pragma solidity ^0.8.20;
 
 import "./contracts/GovernanceToken.sol";
-import "./contracts/Governance Standard/GovernorContract.sol";
-import "./contracts/Governance Standard/Timelock.sol";
 import "./contracts/Box.sol";
 
 /**
  * @title DavidsonDAO
- * @dev Main contract for the Davidson DAO
- * This contract serves as a factory to deploy all the necessary contracts for the DAO
+ * @dev A simple DAO for the Davidson Blockchain Club
+ * Allows token holders to create and vote on proposals
  */
 contract DavidsonDAO {
-    GovernanceToken public governanceToken;
-    Timelock public timelock;
-    GovernorContract public governor;
+    // The token used for voting
+    GovernanceToken public token;
+    
+    // The contract controlled by the DAO
     Box public box;
-
-    // DAO Parameters
-    uint256 public constant MIN_DELAY = 3600; // 1 hour
-    uint256 public constant VOTING_DELAY = 1; // 1 block
-    uint256 public constant VOTING_PERIOD = 50400; // ~1 week (assuming 12s blocks)
-    uint256 public constant QUORUM_PERCENTAGE = 4; // 4% of voters need to vote
-
-    event DAODeployed(
-        address governanceToken,
-        address timelock,
-        address governor,
-        address box
+    
+    // Proposal struct
+    struct Proposal {
+        // The address of the proposer
+        address proposer;
+        
+        // The title of the proposal
+        string title;
+        
+        // The description of the proposal
+        string description;
+        
+        // The target contract to call
+        address target;
+        
+        // The function signature to call
+        bytes callData;
+        
+        // The block number when voting ends
+        uint256 votingEnds;
+        
+        // The number of votes for the proposal
+        uint256 votesFor;
+        
+        // The number of votes against the proposal
+        uint256 votesAgainst;
+        
+        // Whether the proposal has been executed
+        bool executed;
+        
+        // Mapping of addresses to whether they have voted
+        mapping(address => bool) hasVoted;
+    }
+    
+    // Mapping of proposal IDs to proposals
+    mapping(uint256 => Proposal) public proposals;
+    
+    // The total number of proposals
+    uint256 public proposalCount;
+    
+    // The minimum number of tokens required to create a proposal (1% of total supply)
+    uint256 public constant PROPOSAL_THRESHOLD = 10000 * 10**18 / 100;
+    
+    // The voting period in blocks (approximately 1 week with 12s blocks)
+    uint256 public constant VOTING_PERIOD = 50400;
+    
+    // Events
+    event ProposalCreated(
+        uint256 indexed proposalId,
+        address indexed proposer,
+        string title,
+        string description,
+        address target,
+        bytes callData,
+        uint256 votingEnds
     );
-
-    constructor() {
-        // Deploy Governance Token
-        governanceToken = new GovernanceToken();
+    
+    event VoteCast(
+        uint256 indexed proposalId,
+        address indexed voter,
+        bool support,
+        uint256 weight
+    );
+    
+    event ProposalExecuted(
+        uint256 indexed proposalId,
+        address indexed executor,
+        bool success
+    );
+    
+    /**
+     * @dev Constructor
+     * @param _token The governance token
+     */
+    constructor(GovernanceToken _token) {
+        token = _token;
         
-        // Deploy Timelock
-        address[] memory proposers = new address[](1);
-        address[] memory executors = new address[](1);
-        executors[0] = address(0); // Allow anyone to execute
-        timelock = new Timelock(MIN_DELAY, proposers, executors);
-        
-        // Deploy Governor
-        governor = new GovernorContract(
-            governanceToken,
-            timelock,
-            QUORUM_PERCENTAGE,
-            VOTING_PERIOD,
-            VOTING_DELAY
+        // Create a new Box contract owned by this DAO
+        box = new Box(address(this));
+    }
+    
+    /**
+     * @dev Create a new proposal
+     * @param _title The title of the proposal
+     * @param _description The description of the proposal
+     * @param _target The target contract to call
+     * @param _callData The function call data
+     * @return The ID of the new proposal
+     */
+    function propose(
+        string memory _title,
+        string memory _description,
+        address _target,
+        bytes memory _callData
+    ) public returns (uint256) {
+        // Check that the proposer has enough tokens
+        require(
+            token.getPastVotes(msg.sender, block.number - 1) >= PROPOSAL_THRESHOLD,
+            "DavidsonDAO: proposer votes below threshold"
         );
         
-        // Set up roles
-        bytes32 proposerRole = timelock.PROPOSER_ROLE();
-        bytes32 executorRole = timelock.EXECUTOR_ROLE();
-        bytes32 adminRole = timelock.TIMELOCK_ADMIN_ROLE();
+        // Create the proposal
+        uint256 proposalId = proposalCount++;
+        Proposal storage proposal = proposals[proposalId];
         
-        timelock.grantRole(proposerRole, address(governor));
-        timelock.grantRole(executorRole, address(0)); // Allow anyone to execute
-        timelock.revokeRole(adminRole, msg.sender); // Revoke admin role from deployer
+        proposal.proposer = msg.sender;
+        proposal.title = _title;
+        proposal.description = _description;
+        proposal.target = _target;
+        proposal.callData = _callData;
+        proposal.votingEnds = block.number + VOTING_PERIOD;
+        proposal.executed = false;
         
-        // Deploy Box owned by the timelock
-        box = new Box(address(timelock));
-        
-        emit DAODeployed(
-            address(governanceToken),
-            address(timelock),
-            address(governor),
-            address(box)
+        // Emit event
+        emit ProposalCreated(
+            proposalId,
+            msg.sender,
+            _title,
+            _description,
+            _target,
+            _callData,
+            proposal.votingEnds
         );
+        
+        return proposalId;
+    }
+    
+    /**
+     * @dev Cast a vote on a proposal
+     * @param _proposalId The ID of the proposal
+     * @param _support Whether to support the proposal
+     */
+    function castVote(uint256 _proposalId, bool _support) public {
+        Proposal storage proposal = proposals[_proposalId];
+        
+        // Check that the proposal exists and voting is still open
+        require(proposal.proposer != address(0), "DavidsonDAO: proposal doesn't exist");
+        require(block.number <= proposal.votingEnds, "DavidsonDAO: voting closed");
+        require(!proposal.hasVoted[msg.sender], "DavidsonDAO: already voted");
+        
+        // Mark the sender as having voted
+        proposal.hasVoted[msg.sender] = true;
+        
+        // Get the voting weight
+        uint256 weight = token.getPastVotes(msg.sender, proposal.votingEnds - VOTING_PERIOD);
+        
+        // Update the vote count
+        if (_support) {
+            proposal.votesFor += weight;
+        } else {
+            proposal.votesAgainst += weight;
+        }
+        
+        // Emit event
+        emit VoteCast(_proposalId, msg.sender, _support, weight);
+    }
+    
+    /**
+     * @dev Execute a successful proposal
+     * @param _proposalId The ID of the proposal
+     */
+    function execute(uint256 _proposalId) public {
+        Proposal storage proposal = proposals[_proposalId];
+        
+        // Check that the proposal exists, voting is closed, and it hasn't been executed
+        require(proposal.proposer != address(0), "DavidsonDAO: proposal doesn't exist");
+        require(block.number > proposal.votingEnds, "DavidsonDAO: voting still open");
+        require(!proposal.executed, "DavidsonDAO: already executed");
+        
+        // Check that the proposal passed
+        require(proposal.votesFor > proposal.votesAgainst, "DavidsonDAO: proposal failed");
+        
+        // Mark the proposal as executed
+        proposal.executed = true;
+        
+        // Execute the proposal
+        (bool success, ) = proposal.target.call(proposal.callData);
+        
+        // Emit event
+        emit ProposalExecuted(_proposalId, msg.sender, success);
+    }
+    
+    /**
+     * @dev Get the state of a proposal
+     * @param _proposalId The ID of the proposal
+     * @return 0: Pending, 1: Active, 2: Defeated, 3: Succeeded, 4: Executed
+     */
+    function state(uint256 _proposalId) public view returns (uint8) {
+        Proposal storage proposal = proposals[_proposalId];
+        
+        // Check that the proposal exists
+        require(proposal.proposer != address(0), "DavidsonDAO: proposal doesn't exist");
+        
+        // If the proposal has been executed, return Executed
+        if (proposal.executed) {
+            return 4; // Executed
+        }
+        
+        // If voting is still open, return Active
+        if (block.number <= proposal.votingEnds) {
+            return 1; // Active
+        }
+        
+        // If the proposal passed, return Succeeded
+        if (proposal.votesFor > proposal.votesAgainst) {
+            return 3; // Succeeded
+        }
+        
+        // Otherwise, return Defeated
+        return 2; // Defeated
+    }
+    
+    /**
+     * @dev Get the details of a proposal
+     * @param _proposalId The ID of the proposal
+     * @return proposer The address of the proposer
+     * @return title The title of the proposal
+     * @return description The description of the proposal
+     * @return target The target contract to call
+     * @return callData The function call data
+     * @return votingEnds The block number when voting ends
+     * @return votesFor The number of votes for the proposal
+     * @return votesAgainst The number of votes against the proposal
+     * @return executed Whether the proposal has been executed
+     */
+    function getProposal(uint256 _proposalId) public view returns (
+        address proposer,
+        string memory title,
+        string memory description,
+        address target,
+        bytes memory callData,
+        uint256 votingEnds,
+        uint256 votesFor,
+        uint256 votesAgainst,
+        bool executed
+    ) {
+        Proposal storage proposal = proposals[_proposalId];
+        
+        return (
+            proposal.proposer,
+            proposal.title,
+            proposal.description,
+            proposal.target,
+            proposal.callData,
+            proposal.votingEnds,
+            proposal.votesFor,
+            proposal.votesAgainst,
+            proposal.executed
+        );
+    }
+    
+    /**
+     * @dev Check if an address has voted on a proposal
+     * @param _proposalId The ID of the proposal
+     * @param _voter The address to check
+     * @return Whether the address has voted
+     */
+    function hasVoted(uint256 _proposalId, address _voter) public view returns (bool) {
+        return proposals[_proposalId].hasVoted[_voter];
     }
 }

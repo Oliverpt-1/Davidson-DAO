@@ -1,53 +1,51 @@
-# 🏛️ Davidson DAO
+# Davidson DAO
 
-![Davidson DAO Banner](https://www.davidson.edu/sites/default/files/styles/max_650x650/public/2023-08/Primary-Lockup-NewsStory.png?itok=BJeJoK6D)
+A simple DAO (Decentralized Autonomous Organization) for the Davidson Blockchain Club. This DAO allows token holders to create proposals, vote on them, and execute successful proposals.
 
-### NOTE - This is the preemptive DAO I have built with plans to start Davidson's blockchain club this year.  It is still in early development and is NOT runnable.
+## Overview
 
-## Vision
+The Davidson DAO consists of three main contracts:
 
-The Davidson DAO serves as the central governance mechanism for the Davidson Blockchain Club, empowering members to participate in decision-making processes and shape the future of our community.
+1. **GovernanceToken**: An ERC20 token with voting capabilities
+2. **DavidsonDAO**: The main DAO contract that handles proposals and voting
+3. **Box**: A contract controlled by the DAO that manages club resources
 
----
+## Features
 
-## 🎯 Purpose
+- **Token-based Governance**: Members with tokens can vote on proposals
+- **Proposal Creation**: Any member with enough tokens can create a proposal
+- **Voting**: Members can vote for or against proposals
+- **Execution**: Successful proposals can be executed to perform actions
 
-- **Decentralized Governance**: Enable fair and transparent decision-making
-- **Financial Management**: Oversee and allocate club resources
-- **Project Prioritization**: Vote on which initiatives to pursue
-- **Member Empowerment**: Give every member a voice in club operations
+## Contract Details
 
----
+### GovernanceToken
 
-## 🛠️ Key Features
+- ERC20 token with voting capabilities (using OpenZeppelin's ERC20Votes)
+- Total supply: 1,000,000 tokens
+- Allows delegation of voting power
 
-| Feature | Description |
-|---------|-------------|
-| 💼 Proposal Submission | Any member can submit proposals for consideration |
-| 🗳️ Voting System | Secure and transparent voting on all major decisions |
-| 📊 Fund Allocation | Democratic distribution of club funds |
-| 🔗 On-Chain Governance | All decisions recorded on the blockchain for transparency |
+### DavidsonDAO
 
----
+- Manages proposals and voting
+- Requires a minimum token threshold to create proposals (1% of total supply)
+- Voting period: ~1 week (50,400 blocks with 12s block time)
+- Proposals need more votes for than against to pass
 
-## 📋 Technical Overview
+### Box
 
-The Davidson DAO is built using Solidity smart contracts and follows the OpenZeppelin Governor framework. It consists of the following components:
+- Controlled by the DAO
+- Manages club resources:
+  - Treasury
+  - Officers
+  - Projects
+  - Partnerships
 
-1. **GovernanceToken**: An ERC20Votes token that allows token holders to vote on proposals
-2. **GovernorContract**: The main governance contract that handles proposals, voting, and execution
-3. **Timelock**: A delay mechanism to ensure proposals are not executed immediately
-4. **Box**: The contract controlled by the DAO that manages club resources and operations
-
----
-
-## 🚀 Getting Started
+## How to Use
 
 ### Prerequisites
 
 - [Foundry](https://book.getfoundry.sh/getting-started/installation)
-- [Node.js](https://nodejs.org/en/download/)
-- [Yarn](https://yarnpkg.com/getting-started/install)
 
 ### Installation
 
@@ -59,17 +57,12 @@ The Davidson DAO is built using Solidity smart contracts and follows the OpenZep
 
 2. Install dependencies:
    ```bash
-   yarn install
-   ```
-
-3. Install Foundry dependencies:
-   ```bash
-   forge install OpenZeppelin/openzeppelin-contracts
+   forge install
    ```
 
 ### Testing
 
-Run the test suite using Foundry:
+Run the tests:
 
 ```bash
 forge test
@@ -77,61 +70,54 @@ forge test
 
 ### Deployment
 
-1. Deploy the DAO:
-   ```bash
-   forge script scripts/DeployDAO.s.sol --rpc-url <your-rpc-url> --private-key <your-private-key> --broadcast
+1. Create a `.env` file with your private key and RPC URL:
+   ```
+   PRIVATE_KEY=your-private-key
+   RPC_URL=your-rpc-url
    ```
 
-## 🧠 How the DAO Works
+2. Deploy the contracts:
+   ```bash
+   forge script script/DeployDAO.s.sol --rpc-url $RPC_URL --private-key $PRIVATE_KEY --broadcast
+   ```
 
-### 1. Token Distribution
+## Usage Examples
 
-The governance token is initially minted to the deployer, who can distribute it to club members. Each token represents voting power in the DAO.
+### Creating a Proposal
 
-### 2. Proposal Creation
+```solidity
+// Encode the function call
+bytes memory callData = abi.encodeWithSelector(
+    box.updateTreasury.selector,
+    1000 ether
+);
 
-Any token holder can create a proposal to:
-- Update the treasury
-- Elect club officers
-- Create and fund projects
-- Form partnerships
+// Create the proposal
+uint256 proposalId = dao.propose(
+    "Update Treasury",
+    "Set the treasury balance to 1000 ether",
+    address(box),
+    callData
+);
+```
 
-### 3. Voting Process
+### Voting on a Proposal
 
-1. **Proposal Creation**: A proposal is submitted with specific actions to be executed
-2. **Voting Delay**: A short delay before voting begins (1 block)
-3. **Voting Period**: Members vote on the proposal (approximately 1 week)
-4. **Quorum**: At least 4% of the total token supply must vote for the proposal to be valid
-5. **Queue**: If approved, the proposal is queued in the timelock
-6. **Timelock Delay**: A delay before execution (1 hour)
-7. **Execution**: The proposal is executed, and the actions are performed
+```solidity
+// Vote in favor
+dao.castVote(proposalId, true);
 
-### 4. Club Operations
+// Vote against
+dao.castVote(proposalId, false);
+```
 
-The Box contract manages:
-- Treasury funds
-- Club officers and their terms
-- Projects and their funding
-- Partnerships with other organizations
+### Executing a Proposal
 
----
+```solidity
+// Execute a successful proposal
+dao.execute(proposalId);
+```
 
-## 📅 Upcoming Votes
+## License
 
-- [x] Club logo redesign
-- [ ] Fall semester budget allocation
-- [ ] New project selection for Q4
-
----
-
-## 📬 Contact
-
-- **Email**: dao@davidsonblockchain.edu
-- **Discord**: [Join our server](https://discord.gg/davidsonblockchain)
-- **Twitter**: [@DavidsonDAO](https://twitter.com/DavidsonDAO)
-
----
-
-<p align="center">
-  <i>Empowering the future of blockchain education, one vote at a time.</i>
-</p>
+MIT
