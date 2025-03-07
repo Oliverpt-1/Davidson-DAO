@@ -1,0 +1,14 @@
+{
+  "name": "davidson-dao",
+  "version": "1.0.0",
+  "description": "Davidson DAO - Governance for the Davidson Blockchain Club",
+  "scripts": {
+    "test": "forge test",
+    "build": "forge build",
+    "deploy": "forge script script/DeployDAO.s.sol --rpc-url $RPC_URL --private-key $PRIVATE_KEY --broadcast"
+  },
+  "devDependencies": {
+    "@openzeppelin/contracts": "^5.0.2",
+    "hardhat": "^2.22.7"
+  }
+}

@@ -1,0 +1,19 @@
+# Foundry
+out/
+cache/
+forge-cache/
+broadcast/
+
+# Node.js
+node_modules/
+yarn-error.log
+
+# Environment variables
+.env
+
+# IDE
+.vscode/
+.idea/
+
+# Misc
+.DS_Store 
