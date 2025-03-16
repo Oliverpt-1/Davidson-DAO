@@ -3,11 +3,13 @@ pragma solidity ^0.8.20;
 
 import "./contracts/GovernanceToken.sol";
 import "./contracts/Box.sol";
+import "./contracts/MembershipNFT.sol";
 
 /**
  * @title DavidsonDAO
  * @dev A simple DAO for the Davidson Blockchain Club
  * Allows token holders to create and vote on proposals
+ * Requires membership NFT for governance participation
  */
 contract DavidsonDAO {
     // The token used for voting
@@ -15,6 +17,9 @@ contract DavidsonDAO {
     
     // The contract controlled by the DAO
     Box public box;
+    
+    // The membership NFT contract
+    MembershipNFT public membershipNFT;
     
     // Proposal struct
     struct Proposal {
@@ -85,6 +90,9 @@ contract DavidsonDAO {
         bool success
     );
     
+    event MemberVerified(address indexed member);
+    event MembershipIssued(address indexed member, uint256 tokenId);
+    
     /**
      * @dev Constructor
      * @param _token The governance token
@@ -94,6 +102,49 @@ contract DavidsonDAO {
         
         // Create a new Box contract owned by this DAO
         box = new Box(address(this));
+        
+        // Create a new MembershipNFT contract owned by this DAO
+        membershipNFT = new MembershipNFT(address(this), "https://davidson-dao.com/api/metadata/");
+    }
+    
+    /**
+     * @dev Verify a member's eligibility for membership
+     * @param _member The address of the member to verify
+     */
+    function verifyMember(address _member) external {
+        // Only the DAO itself (via proposal execution) can verify members
+        require(msg.sender == address(this), "DavidsonDAO: only DAO can verify members");
+        
+        membershipNFT.verifyMember(_member);
+        emit MemberVerified(_member);
+    }
+    
+    /**
+     * @dev Batch verify multiple members
+     * @param _members Array of member addresses to verify
+     */
+    function batchVerifyMembers(address[] calldata _members) external {
+        // Only the DAO itself (via proposal execution) can verify members
+        require(msg.sender == address(this), "DavidsonDAO: only DAO can verify members");
+        
+        membershipNFT.batchVerifyMembers(_members);
+        
+        for (uint256 i = 0; i < _members.length; i++) {
+            emit MemberVerified(_members[i]);
+        }
+    }
+    
+    /**
+     * @dev Issue a membership NFT to a verified member
+     * @param _to The address of the verified member
+     * @param _tokenURI The URI for the token metadata
+     */
+    function issueMembership(address _to, string memory _tokenURI) external {
+        // Only the DAO itself (via proposal execution) can issue memberships
+        require(msg.sender == address(this), "DavidsonDAO: only DAO can issue memberships");
+        
+        membershipNFT.issueMembership(_to, _tokenURI);
+        emit MembershipIssued(_to, membershipNFT.getMemberCount() - 1);
     }
     
     /**
@@ -110,6 +161,12 @@ contract DavidsonDAO {
         address _target,
         bytes memory _callData
     ) public returns (uint256) {
+        // Check that the proposer has a membership NFT
+        require(
+            membershipNFT.isMember(msg.sender),
+            "DavidsonDAO: proposer must be a member"
+        );
+        
         // Check that the proposer has enough tokens
         require(
             token.getPastVotes(msg.sender, block.number - 1) >= PROPOSAL_THRESHOLD,
@@ -148,6 +205,12 @@ contract DavidsonDAO {
      * @param _support Whether to support the proposal
      */
     function castVote(uint256 _proposalId, bool _support) public {
+        // Check that the voter has a membership NFT
+        require(
+            membershipNFT.isMember(msg.sender),
+            "DavidsonDAO: voter must be a member"
+        );
+        
         Proposal storage proposal = proposals[_proposalId];
         
         // Check that the proposal exists and voting is still open
